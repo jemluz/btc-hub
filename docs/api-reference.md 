@@ -1,0 +1,439 @@
+# 📡 API Reference
+
+Documentação completa das API routes do BTC Indicators Dashboard.
+
+---
+
+## 🌐 Base URL
+
+```
+Local: http://localhost:3000
+Produção: https://your-domain.vercel.app
+```
+
+---
+
+## 📊 Endpoints
+
+### 1. Fear & Greed Index
+
+**Endpoint:** `GET /api/fear-greed`
+
+**Descrição:** Retorna o índice de medo e ganância do mercado cripto (0-100).
+
+**Fonte:** Alternative.me API
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  indicator: 'fear-greed';
+  lastUpdate: string; // ISO 8601
+  data: Array<{
+    value: string;              // "0" - "100"
+    value_classification: string; // "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed"
+    timestamp: string;          // Unix timestamp
+    time_until_update: string;  // Segundos até próxima atualização
+  }>;
+}
+```
+
+**Exemplo de Resposta:**
+
+```json
+{
+  "success": true,
+  "indicator": "fear-greed",
+  "lastUpdate": "2026-02-12T10:30:00.000Z",
+  "data": [
+    {
+      "value": "42",
+      "value_classification": "Fear",
+      "timestamp": "1739318400",
+      "time_until_update": "43200"
+    }
+  ]
+}
+```
+
+**Interpretação:**
+- **0-24:** Extreme Fear (oportunidade de compra)
+- **25-49:** Fear
+- **50:** Neutral
+- **51-74:** Greed
+- **75-100:** Extreme Greed (possível topo)
+
+**Rate Limit:** Sem limite (API pública)
+
+**Cache:** 10 minutos
+
+---
+
+### 2. Mayer Multiple
+
+**Endpoint:** `GET /api/mayer-multiple`
+
+**Descrição:** Calcula a relação entre o preço atual do BTC e sua média móvel de 200 dias.
+
+**Fonte:** CoinGecko (preços) + Cálculo próprio
+
+**Fórmula:** `Mayer Multiple = Preço Atual / MA(200)`
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  indicator: 'mayer-multiple';
+  lastUpdate: string;
+  current: {
+    price: number;           // Preço atual em USD
+    ma200: number;           // Média móvel 200 dias
+    mayerMultiple: number;   // Ratio
+    interpretation: string;  // Análise qualitativa
+  };
+  historical: Array<{
+    date: string;           // YYYY-MM-DD
+    price: number;
+    ma200: number;
+    mayerMultiple: number;
+  }>;
+}
+```
+
+**Exemplo de Resposta:**
+
+```json
+{
+  "success": true,
+  "indicator": "mayer-multiple",
+  "lastUpdate": "2026-02-12T10:30:00.000Z",
+  "current": {
+    "price": 45230.50,
+    "ma200": 42100.23,
+    "mayerMultiple": 1.074,
+    "interpretation": "Normal range"
+  },
+  "historical": [
+    {
+      "date": "2026-01-13",
+      "price": 44500,
+      "ma200": 42000,
+      "mayerMultiple": 1.059
+    }
+  ]
+}
+```
+
+**Interpretação:**
+- **< 1.0:** Abaixo da média (potencial compra)
+- **1.0 - 2.4:** Range normal
+- **> 2.4:** Acima da média (possível bolha)
+
+**Histórico:** Média de 1.4 ao longo da história do BTC
+
+**Rate Limit:** 10-50 calls/min (CoinGecko free tier)
+
+**Cache:** 10 minutos
+
+---
+
+### 3. Rainbow Chart
+
+**Endpoint:** `GET /api/rainbow`
+
+**Descrição:** Regressão logarítmica do preço do BTC com bandas coloridas indicando zonas de compra/venda.
+
+**Fonte:** CoinGecko (preços) + Regressão logarítmica
+
+**Fórmula Base:** `Baseline = 10^(2.66 * log10(daysSinceGenesis) - 17.01)`
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  indicator: 'rainbow-chart';
+  lastUpdate: string;
+  current: {
+    price: number;
+    band: string;  // Nome da banda atual
+    bands: {
+      fireSale: number;        // Azul escuro
+      buy: number;             // Azul
+      accumulate: number;      // Verde escuro
+      stillCheap: number;      // Verde
+      hold: number;            // Amarelo
+      isThisABubble: number;   // Laranja
+      fomo: number;            // Vermelho claro
+      sellSeriously: number;   // Vermelho
+      maximumBubble: number;   // Vermelho escuro
+    };
+  };
+  historical: Array<{
+    date: string;
+    price: number;
+    bands: { ... };
+    currentBand: string;
+  }>;
+}
+```
+
+**Exemplo de Resposta:**
+
+```json
+{
+  "success": true,
+  "indicator": "rainbow-chart",
+  "lastUpdate": "2026-02-12T10:30:00.000Z",
+  "current": {
+    "price": 45230.50,
+    "band": "Still Cheap",
+    "bands": {
+      "fireSale": 15234.23,
+      "buy": 22851.35,
+      "accumulate": 30468.47,
+      "stillCheap": 38085.59,
+      "hold": 49511.26,
+      "isThisABubble": 68554.01,
+      "fomo": 95213.98,
+      "sellSeriously": 133299.57,
+      "maximumBubble": 190427.95
+    }
+  },
+  "historical": []
+}
+```
+
+**Interpretação das Bandas:**
+1. **Fire Sale** (Azul escuro): Oportunidade excepcional
+2. **Buy** (Azul): Forte compra
+3. **Accumulate** (Verde escuro): Acumular
+4. **Still Cheap** (Verde): Ainda barato
+5. **HODL!** (Amarelo): Segurar
+6. **Is This A Bubble?** (Laranja): Cautela
+7. **FOMO Intensifies** (Vermelho claro): Euforia começando
+8. **Sell. Seriously, SELL!** (Vermelho): Vender
+9. **Maximum Bubble** (Vermelho escuro): Topo absoluto
+
+**Rate Limit:** 10-50 calls/min (CoinGecko free tier)
+
+**Cache:** 1 hora (dados menos voláteis)
+
+---
+
+### 4. Stock-to-Flow
+
+**Endpoint:** `GET /api/stock-to-flow`
+
+**Descrição:** Modelo de escassez do Bitcoin baseado em stock (supply) e flow (emissão anual).
+
+**Fonte:** Blockchain.info (block height) + CoinGecko (preço) + Cálculo
+
+**Fórmula:** 
+```
+S2F = Total Supply / Annual Flow
+Model Price = 0.4 * S2F^3
+```
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  indicator: 'stock-to-flow';
+  lastUpdate: string;
+  current: {
+    price: number;              // Preço real atual
+    modelPrice: number;         // Preço previsto pelo modelo
+    stockToFlow: number;        // Ratio S2F
+    deviation: number;          // % desvio do modelo
+    interpretation: string;
+  };
+  metadata: {
+    currentBlockHeight: number;
+    currentReward: number;      // BTC por bloco
+    totalSupply: number;        // BTC em circulação
+    annualFlow: number;         // BTC emitidos por ano
+    nextHalving?: {
+      date: string;
+      block: number;
+      reward: number;
+    };
+  };
+}
+```
+
+**Exemplo de Resposta:**
+
+```json
+{
+  "success": true,
+  "indicator": "stock-to-flow",
+  "lastUpdate": "2026-02-12T10:30:00.000Z",
+  "current": {
+    "price": 45230,
+    "modelPrice": 52340,
+    "stockToFlow": 120.5,
+    "deviation": -13.6,
+    "interpretation": "Near model prediction"
+  },
+  "metadata": {
+    "currentBlockHeight": 878234,
+    "currentReward": 3.125,
+    "totalSupply": 19680000,
+    "annualFlow": 164250,
+    "nextHalving": {
+      "date": "2028-04-01",
+      "block": 1050000,
+      "reward": 1.5625
+    }
+  }
+}
+```
+
+**Interpretação:**
+- **Deviation < -20%:** Significativamente subvalorizado
+- **-20% < Deviation < +20%:** Próximo ao modelo
+- **Deviation > +20%:** Significativamente sobrevalorizado
+
+**Halvings Históricos:**
+```
+2009: 50 BTC/bloco
+2012: 25 BTC/bloco (S2F ~10)
+2016: 12.5 BTC/bloco (S2F ~25)
+2020: 6.25 BTC/bloco (S2F ~50)
+2024: 3.125 BTC/bloco (S2F ~120)
+```
+
+**Rate Limit:** Sem limite (Blockchain.info público)
+
+**Cache:** 30 minutos
+
+---
+
+## ❌ Error Responses
+
+Todas as APIs retornam erro no formato:
+
+```typescript
+{
+  success: false;
+  indicator: string;
+  error: string;
+}
+```
+
+**Status Codes:**
+- `500` - Erro ao buscar dados ou processar
+- `429` - Rate limit excedido (raro)
+- `503` - API externa indisponível
+
+**Exemplo:**
+
+```json
+{
+  "success": false,
+  "indicator": "mayer-multiple",
+  "error": "Failed to fetch data from CoinGecko"
+}
+```
+
+---
+
+## 🔄 Rate Limits
+
+### Por API Externa:
+
+| Fonte | Free Tier Limit | Recomendação |
+|-------|----------------|--------------|
+| Alternative.me | Sem limite oficial | Cache 10min |
+| CoinGecko | 10-50 calls/min | Cache 10min |
+| Blockchain.info | Sem limite oficial | Cache 30min |
+
+### Nossa API (implementar no futuro):
+
+- **Sem autenticação:** 100 requests/hora por IP
+- **Com API key:** 1000 requests/hora
+
+---
+
+## 🔐 Autenticação
+
+**V1/V2:** Nenhuma autenticação necessária (APIs públicas)
+
+**V3+:** Possível implementação de API keys para rate limiting
+
+---
+
+## 📝 Notas de Implementação
+
+### Caching Strategy
+
+Todas as APIs implementam cache in-memory:
+
+```typescript
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
+let cachedData = null;
+let lastFetch = 0;
+
+if (cachedData && (Date.now() - lastFetch) < CACHE_DURATION) {
+  return Response.json(cachedData);
+}
+```
+
+### Error Handling
+
+```typescript
+try {
+  // API call
+} catch (error) {
+  return Response.json(
+    { success: false, indicator: 'name', error: error.message },
+    { status: 500 }
+  );
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Manual Testing:
+
+```bash
+# Fear & Greed
+curl http://localhost:3000/api/fear-greed
+
+# Mayer Multiple
+curl http://localhost:3000/api/mayer-multiple
+
+# Rainbow
+curl http://localhost:3000/api/rainbow
+
+# Stock-to-Flow
+curl http://localhost:3000/api/stock-to-flow
+```
+
+### Validação:
+
+Compare resultados com:
+- Fear & Greed: https://alternative.me/crypto/fear-and-greed-index/
+- Mayer Multiple: https://stats.buybitcoinworldwide.com/mayermultiple/
+- Rainbow: https://www.blockchaincenter.net/en/bitcoin-rainbow-chart/
+- S2F: https://stats.buybitcoinworldwide.com/stock-to-flow/
+
+---
+
+## 📚 Referências
+
+- [Alternative.me API Docs](https://alternative.me/crypto/fear-and-greed-index/)
+- [CoinGecko API Docs](https://www.coingecko.com/en/api/documentation)
+- [Blockchain.info API Docs](https://www.blockchain.com/explorer/api/blockchain_api)
+- [Mayer Multiple Explained](https://mayermultiple.info/)
+- [Stock-to-Flow Model (PlanB)](https://medium.com/@100trillionUSD)
+
+---
+
+**Última atualização:** 2026-02-12
